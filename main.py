@@ -62,7 +62,7 @@ class Locale:
 locale = Locale()
 
 class Snake:
-    def __init__(self):
+    def __init__(self, sprites=None):
         self.length = 1
         self.positions = [(WIDTH // 2, HEIGHT // 2)]
         self.direction = random.choice([pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT])
@@ -70,6 +70,7 @@ class Snake:
         self.score = 0
         self.color = COLOR_DEFAULT_SNAKE
         self.head_color = COLOR_DEFAULT_SNAKE_HEAD
+        self.sprites = sprites
 
     def get_head_position(self):
         return self.positions[0]
@@ -117,23 +118,42 @@ class Snake:
 
     def draw(self, surface):
         for i, p in enumerate(self.positions):
-            color = self.head_color if i == 0 else self.color
-            r = pygame.Rect((p[0], p[1]), (SNAKE_SIZE, SNAKE_SIZE))
-            pygame.draw.rect(surface, color, r, border_radius=4)
-            if i == 0:
-                # Add eyes
-                eye_size = 4
-                eye_color = (0, 0, 0)
-                if self.direction == pygame.K_UP or self.direction == pygame.K_DOWN:
-                    pygame.draw.circle(surface, eye_color, (p[0] + 5, p[1] + 10), eye_size)
-                    pygame.draw.circle(surface, eye_color, (p[0] + 15, p[1] + 10), eye_size)
+            if self.sprites:
+                if i == 0:
+                    # Head sprite
+                    sprite = self.sprites['head']
+                    angle = 0
+                    if self.direction == pygame.K_UP: angle = 0
+                    elif self.direction == pygame.K_DOWN: angle = 180
+                    elif self.direction == pygame.K_LEFT: angle = 90
+                    elif self.direction == pygame.K_RIGHT: angle = -90
+
+                    rotated_head = pygame.transform.rotate(sprite, angle)
+                    # Apply tint
+                    if self.head_color != COLOR_DEFAULT_SNAKE_HEAD:
+                        temp = rotated_head.copy()
+                        temp.fill(self.head_color, special_flags=pygame.BLEND_RGB_MULT)
+                        surface.blit(temp, (p[0], p[1]))
+                    else:
+                        surface.blit(rotated_head, (p[0], p[1]))
                 else:
-                    pygame.draw.circle(surface, eye_color, (p[0] + 10, p[1] + 5), eye_size)
-                    pygame.draw.circle(surface, eye_color, (p[0] + 10, p[1] + 15), eye_size)
+                    # Body sprite (simplification: using a generic body part)
+                    sprite = self.sprites['body']
+                    if self.color != COLOR_DEFAULT_SNAKE:
+                        temp = sprite.copy()
+                        temp.fill(self.color, special_flags=pygame.BLEND_RGB_MULT)
+                        surface.blit(temp, (p[0], p[1]))
+                    else:
+                        surface.blit(sprite, (p[0], p[1]))
+            else:
+                color = self.head_color if i == 0 else self.color
+                r = pygame.Rect((p[0], p[1]), (SNAKE_SIZE, SNAKE_SIZE))
+                pygame.draw.rect(surface, color, r, border_radius=4)
 
 class Food:
-    def __init__(self, snake_positions):
+    def __init__(self, snake_positions, sprite=None):
         self.position = (0, 0)
+        self.sprite = sprite
         self.randomize_position(snake_positions)
 
     def randomize_position(self, snake_positions):
@@ -144,8 +164,11 @@ class Food:
                 break
 
     def draw(self, surface):
-        r = pygame.Rect((self.position[0], self.position[1]), (SNAKE_SIZE, SNAKE_SIZE))
-        pygame.draw.rect(surface, COLOR_FOOD, r, border_radius=10)
+        if self.sprite:
+            surface.blit(self.sprite, (self.position[0], self.position[1]))
+        else:
+            r = pygame.Rect((self.position[0], self.position[1]), (SNAKE_SIZE, SNAKE_SIZE))
+            pygame.draw.rect(surface, COLOR_FOOD, r, border_radius=10)
 
 def get_high_score():
     try:
@@ -218,8 +241,23 @@ async def main():
     font = pygame.font.SysFont("bahnschrift", 25)
     large_font = pygame.font.SysFont("bahnschrift", 50)
 
-    snake = Snake()
-    food = Food(snake.positions)
+    # Load sprites
+    snake_sprites = None
+    food_sprite = None
+    try:
+        assets = pygame.image.load("assets.jpg").convert_alpha()
+        # The sprite sheet is roughly 320x256.
+        # Apple is at bottom left (roughly) -> Actually let's slice based on common sense from the image
+        # Slices are 64x64
+        food_sprite = pygame.transform.scale(assets.subsurface((0, 192, 64, 64)), (SNAKE_SIZE, SNAKE_SIZE))
+        head_sprite = pygame.transform.scale(assets.subsurface((192, 0, 64, 64)), (SNAKE_SIZE, SNAKE_SIZE))
+        body_sprite = pygame.transform.scale(assets.subsurface((192, 128, 64, 64)), (SNAKE_SIZE, SNAKE_SIZE))
+        snake_sprites = {'head': head_sprite, 'body': body_sprite}
+    except Exception as e:
+        print(f"Could not load sprites: {e}")
+
+    snake = Snake(sprites=snake_sprites)
+    food = Food(snake.positions, sprite=food_sprite)
     high_score = get_high_score()
     dpad = VirtualDPad()
     fps = INITIAL_FPS
