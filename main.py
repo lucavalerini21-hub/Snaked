@@ -7,12 +7,14 @@ import platform
 # Constants
 WIDTH, HEIGHT = 800, 600
 SNAKE_SIZE = 20
-FPS = 15
+INITIAL_FPS = 7
+MAX_FPS = 25
+SPEED_INCREMENT = 0.5
 
 # Colors
 COLOR_BG = (20, 20, 30)
-COLOR_SNAKE = (50, 200, 50)
-COLOR_SNAKE_HEAD = (80, 255, 80)
+COLOR_DEFAULT_SNAKE = (50, 200, 50)
+COLOR_DEFAULT_SNAKE_HEAD = (80, 255, 80)
 COLOR_FOOD = (230, 50, 50)
 COLOR_TEXT = (255, 255, 255)
 COLOR_UI_BG = (40, 40, 60)
@@ -66,6 +68,8 @@ class Snake:
         self.direction = random.choice([pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT])
         self.next_direction = self.direction
         self.score = 0
+        self.color = COLOR_DEFAULT_SNAKE
+        self.head_color = COLOR_DEFAULT_SNAKE_HEAD
 
     def get_head_position(self):
         return self.positions[0]
@@ -100,10 +104,20 @@ class Snake:
         self.direction = random.choice([pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT])
         self.next_direction = self.direction
         self.score = 0
+        self.color = COLOR_DEFAULT_SNAKE
+        self.head_color = COLOR_DEFAULT_SNAKE_HEAD
+
+    def change_color(self):
+        # Generate a random bright color
+        r = random.randint(100, 255)
+        g = random.randint(100, 255)
+        b = random.randint(100, 255)
+        self.color = (max(0, r-30), max(0, g-30), max(0, b-30))
+        self.head_color = (r, g, b)
 
     def draw(self, surface):
         for i, p in enumerate(self.positions):
-            color = COLOR_SNAKE_HEAD if i == 0 else COLOR_SNAKE
+            color = self.head_color if i == 0 else self.color
             r = pygame.Rect((p[0], p[1]), (SNAKE_SIZE, SNAKE_SIZE))
             pygame.draw.rect(surface, color, r, border_radius=4)
             if i == 0:
@@ -208,6 +222,7 @@ async def main():
     food = Food(snake.positions)
     high_score = get_high_score()
     dpad = VirtualDPad()
+    fps = INITIAL_FPS
 
     is_mobile = False
     if platform.system() == 'Emscripten':
@@ -239,6 +254,7 @@ async def main():
                 if state == "MENU":
                     state = "PLAYING"
                     snake.reset()
+                    fps = INITIAL_FPS
                 elif state == "PLAYING":
                     key = dpad.get_key(pos)
                     if key:
@@ -260,6 +276,7 @@ async def main():
                     if event.key == pygame.K_SPACE:
                         state = "PLAYING"
                         snake.reset()
+                        fps = INITIAL_FPS
                     elif event.key == pygame.K_l:
                         locale.toggle()
                 elif state == "PLAYING":
@@ -280,6 +297,7 @@ async def main():
                     if event.key == pygame.K_c:
                         state = "PLAYING"
                         snake.reset()
+                        fps = INITIAL_FPS
                         food.randomize_position(snake.positions)
                     elif event.key == pygame.K_q:
                         state = "MENU"
@@ -297,6 +315,14 @@ async def main():
             if snake.get_head_position() == food.position:
                 snake.length += 1
                 snake.score += 1
+
+                # Speed increase
+                fps = min(MAX_FPS, fps + SPEED_INCREMENT)
+
+                # Color change every 5 food
+                if snake.score % 5 == 0:
+                    snake.change_color()
+
                 food.randomize_position(snake.positions)
 
             snake.draw(screen)
@@ -340,7 +366,7 @@ async def main():
 
         pygame.display.flip()
         await asyncio.sleep(0)
-        clock.tick(FPS)
+        clock.tick(fps)
 
 if __name__ == "__main__":
     asyncio.run(main())
